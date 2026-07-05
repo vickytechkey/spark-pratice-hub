@@ -19,17 +19,106 @@ def show():
             st.warning("No problems available. Please import problems via the Import page.")
             return
             
-    # Load all problems for dropdown selector
-    all_probs = db.get_problems()
-    prob_options = {f"{p['id']} - {p['title']} ({p['difficulty']})": p["id"] for p in all_probs}
-    
-    # Dropdown selector to switch problems
-    selected_label = st.selectbox(
-        "Select Problem",
-        list(prob_options.keys()),
-        index=list(prob_options.values()).index(st.session_state["selected_problem_id"]) if st.session_state["selected_problem_id"] in prob_options.values() else 0
-    )
-    st.session_state["selected_problem_id"] = prob_options[selected_label]
+    # Expander to switch problem via table selector
+    with st.expander("🔍 Switch Problem (Table Selector)", expanded=False):
+        # Retrieve list of solved/completed problems
+        submissions = db.get_submissions()
+        solved_ids = set(s["problem_id"] for s in submissions if s["status"] == "PASS")
+        
+        col_f1, col_f2, col_f3, col_f4 = st.columns([2, 1, 1, 1])
+        with col_f1:
+            search_query = st.text_input("🔍 Search Title / Concept", "", key="practice_search")
+        with col_f2:
+            difficulty_filter = st.selectbox("Difficulty", ["All", "Easy", "Medium", "Hard"], key="practice_diff")
+        with col_f3:
+            status_filter = st.selectbox("Status", ["All", "Completed", "Pending"], key="practice_status")
+        with col_f4:
+            page_size = st.selectbox("Display Limit", [5, 10, 20, 50, 100], index=1, key="practice_limit")
+            
+        # Get all problems
+        all_probs_raw = db.get_problems()
+        
+        # Apply filters
+        filtered_probs = []
+        for p in all_probs_raw:
+            # Search
+            if search_query:
+                q = search_query.lower()
+                title_match = q in p["title"].lower()
+                desc_match = q in p["description"].lower()
+                concept_match = q in p.get("concepts", "").lower() if p.get("concepts") else False
+                if not (title_match or desc_match or concept_match):
+                    continue
+            
+            # Difficulty
+            if difficulty_filter != "All" and p["difficulty"] != difficulty_filter:
+                continue
+                
+            # Status
+            is_solved = p["id"] in solved_ids
+            if status_filter == "Completed" and not is_solved:
+                continue
+            if status_filter == "Pending" and is_solved:
+                continue
+                
+            filtered_probs.append(p)
+            
+        if not filtered_probs:
+            st.info("No problems found matching the filters.")
+        else:
+            # Pagination
+            total_items = len(filtered_probs)
+            total_pages = max(1, (total_items + page_size - 1) // page_size)
+            
+            col_page, col_info = st.columns([1, 4])
+            with col_page:
+                page_num = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="practice_page")
+            with col_info:
+                st.write("")
+                st.write(f"Showing {(page_num-1)*page_size + 1} - {min(page_num*page_size, total_items)} of {total_items} problems")
+                
+            start_idx = (page_num - 1) * page_size
+            end_idx = start_idx + page_size
+            page_probs = filtered_probs[start_idx:end_idx]
+            
+            # Display DataFrame
+            display_data = []
+            for p in page_probs:
+                is_active = p["id"] == st.session_state["selected_problem_id"]
+                status_str = "🟢 Completed" if p["id"] in solved_ids else "🟡 Pending"
+                display_data.append({
+                    "Active": "🎯 Active" if is_active else "",
+                    "Status": status_str,
+                    "ID": p["id"],
+                    "Title": p["title"],
+                    "Difficulty": p["difficulty"],
+                    "Category": p["category"]
+                })
+                
+            df_display = pd.DataFrame(display_data)
+            
+            event = st.dataframe(
+                df_display,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Active": st.column_config.TextColumn("Active", width="small"),
+                    "Status": st.column_config.TextColumn("Status", width="small"),
+                    "ID": st.column_config.TextColumn("ID", width="small"),
+                    "Title": st.column_config.TextColumn("Title"),
+                    "Difficulty": st.column_config.TextColumn("Difficulty", width="small"),
+                    "Category": st.column_config.TextColumn("Category"),
+                },
+                selection_mode="single-row",
+                on_select="rerun"
+            )
+            
+            if event and hasattr(event, "selection") and event.selection.rows:
+                selected_row_idx = event.selection.rows[0]
+                new_selected_id = df_display.iloc[selected_row_idx]["ID"]
+                if new_selected_id != st.session_state["selected_problem_id"]:
+                    st.session_state["selected_problem_id"] = new_selected_id
+                    st.rerun()
     
     problem_id = st.session_state["selected_problem_id"]
     problem = db.get_problem(problem_id)
