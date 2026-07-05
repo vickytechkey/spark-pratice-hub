@@ -123,6 +123,18 @@ def show():
     
     problem_id = st.session_state["selected_problem_id"]
     problem = db.get_problem(problem_id)
+    
+    # Fallback if the selected problem no longer exists in the database
+    if not problem:
+        problems = db.get_problems()
+        if problems:
+            st.session_state["selected_problem_id"] = problems[0]["id"]
+            problem_id = problems[0]["id"]
+            problem = problems[0]
+        else:
+            st.warning("No problems available. Please import problems.")
+            return
+            
     test_cases = db.get_test_cases(problem_id)
     
     # Spark profile selector
