@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_ace import st_ace
 import pandas as pd
 import json
 import plotly.express as px
@@ -220,7 +221,19 @@ def show():
     if subs:
         default_code = subs[0]["code"]
         
-    code_str = st.text_area("Python Code", default_code, height=300)
+    code_str = st_ace(
+        value=default_code,
+        language="python",
+        theme="monokai",
+        keybinding="vscode",
+        font_size=14,
+        tab_size=4,
+        show_gutter=True,
+        show_print_margin=False,
+        wrap=True,
+        key=f"editor_{problem_id}",
+        height=350
+    )
     
     # Execution & results
     col_btn1, col_btn2 = st.columns(2)
@@ -299,8 +312,12 @@ def show():
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
         
-        # Submission History Table
-        st.write("**Recent Submissions**")
+        col_hist_title, col_hist_btn = st.columns([5, 1])
+        with col_hist_title:
+            st.write("**Recent Submissions**")
+        with col_hist_btn:
+            if st.button("🔄 Refresh", key="btn_refresh_history", use_container_width=True):
+                st.rerun()
         st.dataframe(
             pd.DataFrame([
                 {
