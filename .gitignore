@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases
+*.db
+*.db-journal
+
+# Local storage directories
+datasets/
+uploads/
+exports/
+reports/
+logs/
+solutions/
+
+# Testing
+tests/temp_test_problems.xlsx
+
+# OS files
+.DS_Store
+Thumbs.db
