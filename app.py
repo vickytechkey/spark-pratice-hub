@@ -1,6 +1,6 @@
 import streamlit as st
 from database import db
-from ui import dashboard, problems, practice, profiles, admin, help_page
+from ui import dashboard, problems, practice, profiles, admin, help_page, roadmap
 
 # Page config
 st.set_page_config(
@@ -56,12 +56,14 @@ if "active_page" not in st.session_state:
 
 pages = {
     "⚡ Dashboard": dashboard,
+    "🗺️ Learning Roadmaps": roadmap,
     "📂 Problem Bank": problems,
     "💻 Practice Sandbox": practice,
     "⚙️ Spark Profiles": profiles,
     "📥 Import Problems": admin,
     "📖 Understand Me": help_page
 }
+
 
 # Render sidebar radio buttons
 selected_page = st.sidebar.radio(

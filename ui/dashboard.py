@@ -4,6 +4,7 @@ import pandas as pd
 import datetime
 import plotly.express as px
 from database import db
+from ui import roadmap
 
 def render_heatmap(activity_data):
     # Prepare date range for the last 12 months
@@ -331,6 +332,34 @@ def show():
                 st.info("No strong topics identified yet. Solve more problems to build strength.")
                 
         st.write("---")
+        
+    # Active Roadmaps Progress
+    st.subheader("🗺️ Active Roadmaps Progress")
+    opted_roadmaps = db.get_opted_roadmaps()
+    has_active_roadmap = False
+    for level, opted in opted_roadmaps.items():
+        if opted:
+            has_active_roadmap = True
+            # Filter problems for this level
+            level_probs = roadmap.get_roadmap_problems(level, problems)
+            total = len(level_probs)
+            solved_count = sum(1 for p in level_probs if p["id"] in solved_ids)
+            pct = int((solved_count / total * 100)) if total > 0 else 0
+            
+            col_rm1, col_rm2 = st.columns([4, 1])
+            with col_rm1:
+                st.write(f"**{level} Roadmap** ({solved_count}/{total} solved)")
+                st.progress(pct / 100.0)
+            with col_rm2:
+                st.write("")
+                if st.button("Resume Path", key=f"resume_rm_{level}"):
+                    st.session_state["selected_roadmap_level"] = level
+                    st.session_state["active_page"] = "🗺️ Learning Roadmaps"
+                    st.rerun()
+    if not has_active_roadmap:
+        st.info("You haven't opted into any roadmaps yet. Go to 'Learning Roadmaps' in the sidebar to start a structured learning path!")
+        
+    st.write("---")
     
     # Goals and Progress
     st.subheader("🎯 Goals & Progress")
@@ -339,20 +368,51 @@ def show():
         # Save a default monthly goal if none exists
         today = datetime.date.today()
         month_end = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
-        db.save_goal("Monthly", 15, solved_problems, today.strftime("%Y-%m-%d"), month_end.strftime("%Y-%m-%d"))
+        db.save_goal("Monthly", 15, 0, today.strftime("%Y-%m-%d"), month_end.strftime("%Y-%m-%d"))
         goals = db.get_goals()
         
     for g in goals:
         goal_type = g["type"]
         target = g["target"]
         
-        # Recalculate progress based on current actuals
-        progress = solved_problems # Simplified for MVP to show total solved
+        # Recalculate progress based on current actuals and goal criteria
+        g_start = g["start_date"]
+        g_end = g["end_date"]
+        if goal_type == "Streak":
+            active_dates = sorted([
+                datetime.datetime.strptime(d, "%Y-%m-%d").date()
+                for d in activity_data
+                if activity_data[d]["solved"] > 0 and g_start <= d <= g_end
+            ])
+            if active_dates:
+                longest_streak = 1
+                temp_streak = 1
+                for idx in range(1, len(active_dates)):
+                    if (active_dates[idx] - active_dates[idx-1]).days == 1:
+                        temp_streak += 1
+                        if temp_streak > longest_streak:
+                            longest_streak = temp_streak
+                    elif (active_dates[idx] - active_dates[idx-1]).days == 0:
+                        continue
+                    else:
+                        temp_streak = 1
+                progress = longest_streak
+            else:
+                progress = 0
+        else:
+            solved_in_period = set(
+                s["problem_id"]
+                for s in all_submissions
+                if s["status"] == "PASS" and g_start <= s["timestamp"][:10] <= g_end
+            )
+            progress = len(solved_in_period)
+
         percent = min(int((progress / target) * 100), 100)
         
         st.write(f"**{goal_type} Goal:** Solve {target} problems by {g['end_date']}.")
         st.progress(percent / 100.0)
         st.write(f"{progress} / {target} completed ({percent}%)")
+
         
     # Goal Customization Expander
     with st.expander("⚙️ Manage & Add Customized Goals"):
@@ -386,7 +446,7 @@ def show():
                 db.save_goal(
                     goal_type=g_type,
                     target=g_target,
-                    progress=solved_problems,
+                    progress=0,
                     start_date=g_start.strftime("%Y-%m-%d"),
                     end_date=g_end.strftime("%Y-%m-%d")
                 )

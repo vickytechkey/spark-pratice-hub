@@ -104,6 +104,16 @@ def init_db():
     )
     """)
     
+    # 8. user_roadmaps table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_roadmaps (
+        level TEXT PRIMARY KEY,
+        opted_in INTEGER DEFAULT 0
+    )
+    """)
+    for lvl in ["Beginner", "Intermediate", "Advanced", "Expert", "Master"]:
+        cursor.execute("INSERT OR IGNORE INTO user_roadmaps (level, opted_in) VALUES (?, 0)", (lvl,))
+    
     # Load default profiles from YAML if they don't exist
     if os.path.exists("config/config.yaml"):
         with open("config/config.yaml", "r") as f:
@@ -371,4 +381,22 @@ def delete_goal(goal_id):
     cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
     conn.commit()
     conn.close()
+
+# Roadmaps
+def get_opted_roadmaps():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM user_roadmaps")
+    rows = cursor.fetchall()
+    conn.close()
+    return {r["level"]: r["opted_in"] for r in rows}
+
+def opt_in_roadmap(level, opted=True):
+    conn = get_connection()
+    cursor = conn.cursor()
+    val = 1 if opted else 0
+    cursor.execute("UPDATE user_roadmaps SET opted_in = ? WHERE level = ?", (val, level))
+    conn.commit()
+    conn.close()
+
 
