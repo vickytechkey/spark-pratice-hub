@@ -278,3 +278,13 @@ body {
 .heatmap-cell.level-2 { background: rgba(0, 230, 118, 0.4); }
 .heatmap-cell.level-3 { background: rgba(0, 230, 118, 0.7); }
 .heatmap-cell.level-4 { background: var(--success); }
+
+/* Fix light select option backgrounds */
+select, option {
+  background-color: #1e2028 !important;
+  color: var(--text-primary) !important;
+}
+select:focus, option:focus {
+  outline: none;
+}
+
