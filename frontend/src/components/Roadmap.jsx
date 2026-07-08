@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ToggleLeft, ToggleRight, Compass, ShieldAlert, Award, Star } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Compass, ShieldAlert, Award, Star, Trophy } from 'lucide-react';
 
 function Roadmap({ onSelectProblem }) {
   const [roadmaps, setRoadmaps] = useState([]);
