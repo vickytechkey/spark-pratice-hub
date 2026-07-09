@@ -9,6 +9,7 @@ class Problem(models.Model):
     concepts = models.CharField(max_length=500, blank=True, null=True)
     hints = models.TextField(blank=True, null=True)
     comparison_mode = models.CharField(max_length=50, default='Exact')
+    companies = models.JSONField(default=list, blank=True, null=True)
 
     def __str__(self):
         return f"{self.id} - {self.title}"
@@ -47,11 +48,18 @@ class SparkProfile(models.Model):
     extra_configs = models.JSONField(blank=True, null=True)
 
 class Goal(models.Model):
-    type = models.CharField(max_length=20)  # Daily, Weekly, Monthly, Streak
+    type = models.CharField(max_length=20)  # Daily, Weekly, Monthly, Streak, Custom
+    title = models.CharField(max_length=200, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    category = models.CharField(max_length=100, blank=True, null=True)
+    priority = models.CharField(max_length=20, default='Medium')  # Low, Medium, High
+    status = models.CharField(max_length=20, default='Not Started')  # Not Started, In Progress, Completed
     target = models.IntegerField()
     progress = models.IntegerField(default=0)
-    start_date = models.DateField()
-    end_date = models.DateField()
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)  # Target completion date
+    completion_date = models.DateField(blank=True, null=True)
+    time_taken = models.CharField(max_length=50, blank=True, null=True)
 
 class DailyActivity(models.Model):
     date = models.DateField(primary_key=True)
@@ -61,3 +69,14 @@ class DailyActivity(models.Model):
 class UserRoadmap(models.Model):
     level = models.CharField(max_length=50, primary_key=True)
     opted_in = models.BooleanField(default=False)
+
+class Challenge(models.Model):
+    id = models.CharField(max_length=50, primary_key=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    badge_name = models.CharField(max_length=100)
+    badge_icon = models.CharField(max_length=50, default='Award')  # Lucide icon name
+    problems = models.ManyToManyField(Problem, related_name='challenges')
+
+    def __str__(self):
+        return self.name

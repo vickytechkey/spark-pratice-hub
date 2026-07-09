@@ -189,7 +189,31 @@ function ProblemBank({ onSelectProblem }) {
                       )}
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{prob.id}</td>
-                    <td style={{ fontWeight: 600 }}>{prob.title}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      <div>{prob.title}</div>
+                      {prob.companies && prob.companies.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
+                          {prob.companies.slice(0, 3).map((c, idx) => (
+                            <span 
+                              key={idx} 
+                              style={{ 
+                                fontSize: '0.65rem', 
+                                background: 'rgba(255,255,255,0.05)', 
+                                padding: '0.1rem 0.35rem', 
+                                borderRadius: '4px', 
+                                color: 'var(--text-muted)' 
+                              }}
+                              title={c.frequency}
+                            >
+                              {c.company}
+                            </span>
+                          ))}
+                          {prob.companies.length > 3 && (
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>+{prob.companies.length - 3}</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{prob.category}</td>
                     <td>
                       <span className={`badge badge-${prob.difficulty.toLowerCase()}`}>

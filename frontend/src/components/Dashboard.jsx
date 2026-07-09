@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Flame, Trophy, CheckCircle, BarChart3, Clock, Sparkles } from 'lucide-react';
+import { Flame, Trophy, CheckCircle, BarChart3, Clock, Sparkles, Plus, X, Calendar, AlertTriangle, Trash } from 'lucide-react';
 
 function Dashboard({ onSelectProblem }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Custom Goal Form State
+  const [showModal, setShowModal] = useState(false);
+  const [newGoalTitle, setNewGoalTitle] = useState('');
+  const [newGoalDesc, setNewGoalDesc] = useState('');
+  const [newGoalCategory, setNewGoalCategory] = useState('All');
+  const [newGoalTarget, setNewGoalTarget] = useState(5);
+  const [newGoalEndDate, setNewGoalEndDate] = useState('');
+  const [newGoalPriority, setNewGoalPriority] = useState('Medium');
+
+  const fetchDashboardData = () => {
     fetch('http://localhost:8000/api/dashboard/')
       .then(res => res.json())
       .then(resData => {
@@ -16,7 +25,60 @@ function Dashboard({ onSelectProblem }) {
         console.error(err);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
   }, []);
+
+  const handleCreateCustomGoal = (e) => {
+    e.preventDefault();
+    if (!newGoalTitle.trim()) return;
+
+    const payload = {
+      type: 'Custom',
+      title: newGoalTitle,
+      description: newGoalDesc,
+      category: newGoalCategory === 'All' ? '' : newGoalCategory,
+      target: parseInt(newGoalTarget),
+      end_date: newGoalEndDate || null,
+      priority: newGoalPriority,
+      status: 'Not Started',
+      start_date: new Date().toISOString().split('T')[0]
+    };
+
+    fetch('http://localhost:8000/api/goals/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(res => res.json())
+      .then(() => {
+        setShowModal(false);
+        // Clear form
+        setNewGoalTitle('');
+        setNewGoalDesc('');
+        setNewGoalCategory('All');
+        setNewGoalTarget(5);
+        setNewGoalEndDate('');
+        setNewGoalPriority('Medium');
+        fetchDashboardData();
+      })
+      .catch(err => console.error(err));
+  };
+
+  const handleDeleteGoal = (goalId) => {
+    if (!window.confirm("Are you sure you want to delete this goal?")) return;
+    fetch(`http://localhost:8000/api/goals/${goalId}/`, {
+      method: 'DELETE',
+    })
+      .then(() => {
+        fetchDashboardData();
+      })
+      .catch(err => console.error(err));
+  };
 
   if (loading) {
     return <div style={{ color: 'var(--text-secondary)' }}>Loading Dashboard metrics...</div>;
@@ -178,29 +240,193 @@ function Dashboard({ onSelectProblem }) {
             </div>
           )}
 
-          {/* Monthly Goal Progress */}
-          {data.monthly_goal && (
-            <div className="glass-panel" style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          {/* Goals Section */}
+          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Trophy size={18} color="#ffb300" />
-                <h4 style={{ fontSize: '1rem', fontWeight: 600 }}>Monthly Goal</h4>
+                <h4 style={{ fontSize: '1rem', fontWeight: 600 }}>Active Goals</h4>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                <span>Solved: {data.monthly_goal.progress} / {data.monthly_goal.target}</span>
-                <span>{Math.round((data.monthly_goal.progress / data.monthly_goal.target) * 100)}%</span>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                onClick={() => setShowModal(true)}
+              >
+                <Plus size={12} /> Add Custom
+              </button>
+            </div>
+
+            {data.active_goals && data.active_goals.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>
+                No active goals. Click Add Custom to create one!
               </div>
-              {/* Progress bar */}
-              <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div 
-                  style={{ 
-                    height: '100%', 
-                    background: 'linear-gradient(90deg, #ffb300, #ff8f00)', 
-                    width: `${Math.min(100, (data.monthly_goal.progress / data.monthly_goal.target) * 100)}%` 
-                  }} 
-                />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {data.active_goals && data.active_goals.map((goal) => {
+                  const percent = goal.target > 0 ? Math.round((goal.progress / goal.target) * 100) : 0;
+                  return (
+                    <div 
+                      key={goal.id} 
+                      style={{ 
+                        background: 'rgba(255,255,255,0.02)', 
+                        border: '1px solid var(--border-glass)', 
+                        borderRadius: '8px', 
+                        padding: '1rem',
+                        position: 'relative'
+                      }}
+                    >
+                      {goal.type === 'Custom' && (
+                        <button 
+                          style={{ position: 'absolute', right: '0.5rem', top: '0.5rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                          onClick={() => handleDeleteGoal(goal.id)}
+                          title="Delete Goal"
+                        >
+                          <Trash size={12} />
+                        </button>
+                      )}
+                      
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem', paddingRight: '1.5rem' }}>
+                        {goal.title || `${goal.type} Goal`}
+                      </div>
+
+                      {goal.category && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                          Category: {goal.category}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
+                        <span>Progress: {goal.progress} / {goal.target}</span>
+                        <span>{percent}%</span>
+                      </div>
+
+                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+                        <div style={{ height: '100%', background: 'linear-gradient(90deg, #ffb300, #ff8f00)', width: `${Math.min(100, percent)}%` }} />
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        <span>Target: {goal.end_date || 'None'}</span>
+                        {goal.days_remaining !== null && (
+                          <span style={{ color: goal.days_remaining <= 2 ? '#ff4b4b' : 'var(--text-muted)', fontWeight: 600 }}>
+                            {goal.days_remaining} days left
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'right' }}>
-                Ends: {data.monthly_goal.end_date}
+            )}
+          </div>
+
+          {/* Create Custom Goal Modal Overlay */}
+          {showModal && (
+            <div style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0, 
+              backgroundColor: 'rgba(0,0,0,0.7)', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              zIndex: 1000,
+              backdropFilter: 'blur(4px)'
+            }}>
+              <div className="glass-panel" style={{ width: '450px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', border: '1px solid var(--border-glass)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Create Custom Goal</h3>
+                  <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateCustomGoal} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Goal Title</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Master joins this week" 
+                      value={newGoalTitle}
+                      onChange={(e) => setNewGoalTitle(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Description</label>
+                    <textarea 
+                      placeholder="Goal description..." 
+                      value={newGoalDesc}
+                      onChange={(e) => setNewGoalDesc(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: '#fff', outline: 'none', height: '60px', resize: 'none' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Category</label>
+                      <select 
+                        value={newGoalCategory}
+                        onChange={(e) => setNewGoalCategory(e.target.value)}
+                        style={{ width: '100%', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                      >
+                        <option value="All">All Categories</option>
+                        <option value="Filtering & Sorting">Filtering & Sorting</option>
+                        <option value="Date & String">Date & String</option>
+                        <option value="Aggregations">Aggregations</option>
+                        <option value="Joins">Joins</option>
+                        <option value="Advanced Nested & Pivot">Advanced Nested & Pivot</option>
+                        <option value="Window Functions">Window Functions</option>
+                        <option value="Data Cleaning & Null Handling">Data Cleaning & Null Handling</option>
+                        <option value="Performance & Optimization">Performance & Optimization</option>
+                        <option value="Array & Map Operations">Array & Map Operations</option>
+                        <option value="User Defined Functions (UDFs)">UDFs</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Target problems count</label>
+                      <input 
+                        type="number" 
+                        min="1"
+                        required
+                        value={newGoalTarget}
+                        onChange={(e) => setNewGoalTarget(e.target.value)}
+                        style={{ width: '100%', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Target completion date</label>
+                      <input 
+                        type="date" 
+                        value={newGoalEndDate}
+                        onChange={(e) => setNewGoalEndDate(e.target.value)}
+                        style={{ width: '100%', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Priority</label>
+                      <select 
+                        value={newGoalPriority}
+                        onChange={(e) => setNewGoalPriority(e.target.value)}
+                        style={{ width: '100%', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                      >
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>Create Goal</button>
+                </form>
               </div>
             </div>
           )}

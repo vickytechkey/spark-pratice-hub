@@ -11,11 +11,11 @@ from rest_framework.response import Response
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 
-from practice.models import Problem, TestCase, Dataset, Submission, SparkProfile, Goal, DailyActivity, UserRoadmap
+from practice.models import Problem, TestCase, Dataset, Submission, SparkProfile, Goal, DailyActivity, UserRoadmap, Challenge
 from practice.serializers import (
     ProblemSerializer, TestCaseSerializer, DatasetSerializer, 
     SubmissionSerializer, SparkProfileSerializer, GoalSerializer, 
-    DailyActivitySerializer, UserRoadmapSerializer
+    DailyActivitySerializer, UserRoadmapSerializer, ChallengeSerializer
 )
 from practice.runner import run_solution
 from practice.importer import import_from_excel
@@ -73,19 +73,56 @@ class DashboardView(APIView):
         # Coding hours estimation (10 min per submission)
         coding_hours = round((submissions.count() * 10) / 60, 1)
         
-        # 4. Monthly Goal Progress
-        monthly_goal = Goal.objects.filter(type='Monthly', start_date__lte=today, end_date__gte=today).first()
-        monthly_goal_data = None
-        if monthly_goal:
-            # calculate progress: unique solved problems in this month
-            solved_this_month = Submission.objects.filter(
-                status='PASS', 
-                timestamp__date__gte=monthly_goal.start_date, 
-                timestamp__date__lte=monthly_goal.end_date
-            ).values('problem').distinct().count()
-            monthly_goal.progress = solved_this_month
-            monthly_goal.save()
-            monthly_goal_data = GoalSerializer(monthly_goal).data
+        # 4. Active & Custom Goals progress update
+        active_goals = Goal.objects.exclude(status='Completed')
+        for goal in active_goals:
+            if goal.type in ['Monthly', 'Daily', 'Weekly']:
+                start = goal.start_date or (today - datetime.timedelta(days=30))
+                end = goal.end_date or today
+                solved_count = Submission.objects.filter(
+                    status='PASS', 
+                    timestamp__date__gte=start, 
+                    timestamp__date__lte=end
+                ).values('problem').distinct().count()
+                goal.progress = solved_count
+            elif goal.type == 'Custom':
+                if goal.category:
+                    q = Submission.objects.filter(status='PASS', problem__category=goal.category)
+                    if goal.start_date:
+                        q = q.filter(timestamp__date__gte=goal.start_date)
+                    if goal.end_date:
+                        q = q.filter(timestamp__date__lte=goal.end_date)
+                    solved_count = q.values('problem').distinct().count()
+                else:
+                    q = Submission.objects.filter(status='PASS')
+                    if goal.start_date:
+                        q = q.filter(timestamp__date__gte=goal.start_date)
+                    if goal.end_date:
+                        q = q.filter(timestamp__date__lte=goal.end_date)
+                    solved_count = q.values('problem').distinct().count()
+                goal.progress = solved_count
+
+            # Auto-completion trigger
+            if goal.progress >= goal.target:
+                goal.status = 'Completed'
+                goal.completion_date = today
+                if goal.start_date:
+                    days_taken = (today - goal.start_date).days
+                    goal.time_taken = f"{days_taken} days" if days_taken > 0 else "Less than 1 day"
+                else:
+                    goal.time_taken = "1 day"
+            elif goal.progress > 0:
+                goal.status = 'In Progress'
+            else:
+                goal.status = 'Not Started'
+            goal.save()
+
+        active_goals_qs = Goal.objects.exclude(status='Completed')
+        active_goals_data = GoalSerializer(active_goals_qs, many=True).data
+
+        # Keep legacy monthly_goal key for compatibility
+        monthly_goal = Goal.objects.filter(type='Monthly').exclude(status='Completed').first()
+        monthly_goal_data = GoalSerializer(monthly_goal).data if monthly_goal else None
             
         # 5. Today's mission
         # Find an unsolved problem as today's mission
@@ -113,6 +150,7 @@ class DashboardView(APIView):
             'coding_hours': coding_hours,
             'spark_jobs_executed': spark_jobs_executed,
             'monthly_goal': monthly_goal_data,
+            'active_goals': active_goals_data,
             'today_mission': today_mission,
             'heatmap_data': heatmap_data,
             'total_problems': total_problems
@@ -212,11 +250,12 @@ class PracticeRunView(APIView):
         problem_id = request.data.get('problem_id')
         code = request.data.get('code')
         profile_name = request.data.get('profile_name', 'Interview')
+        submit = request.data.get('submit', True)
         
         if not problem_id or not code:
             return Response({'error': 'problem_id and code are required.'}, status=status.HTTP_400_BAD_REQUEST)
             
-        res = run_solution(problem_id, code, profile_name, submit=True)
+        res = run_solution(problem_id, code, profile_name, submit=submit)
         return Response(res)
 
 class SparkProfileViewSet(viewsets.ModelViewSet):
@@ -230,10 +269,69 @@ class GoalViewSet(viewsets.ModelViewSet):
 class UserRoadmapViewSet(APIView):
     def get(self, request):
         levels = ["Beginner", "Intermediate", "Advanced", "Expert", "Master"]
+        solved_ids = set(Submission.objects.filter(status='PASS').values_list('problem_id', flat=True))
+        
+        level_categories = {
+            "Beginner": ["Filtering & Sorting", "Date & String"],
+            "Intermediate": ["Aggregations", "Joins"],
+            "Advanced": ["Advanced Nested & Pivot", "Window Functions"],
+            "Expert": ["Data Cleaning & Null Handling", "Array & Map Operations"],
+            "Master": ["Performance & Optimization", "User Defined Functions (UDFs)", "User Defined Functions (UDFs)"]
+        }
+        
+        level_skills = {
+            "Beginner": ["DataFrame Creation", "Filtering", "Sorting", "Basic Select", "String manipulation"],
+            "Intermediate": ["Aggregations", "Group By", "Inner/Outer Joins", "Column operations"],
+            "Advanced": ["Window Functions", "Analytical Partitioning", "Pivoting", "Nested Structs", "Array explosion"],
+            "Expert": ["Custom UDFs", "Regex extraction", "Null filling (fillna/coalesce)", "Data Cleaning"],
+            "Master": ["Performance Tuning", "Query Optimization", "Repartitioning", "Coalescing", "Broadcast joins"]
+        }
+        
+        level_multipliers = {
+            "Beginner": 15,
+            "Intermediate": 25,
+            "Advanced": 35,
+            "Expert": 50,
+            "Master": 60
+        }
+        
         roadmaps = []
         for lvl in levels:
             rm, created = UserRoadmap.objects.get_or_create(level=lvl, defaults={'opted_in': False})
-            roadmaps.append(UserRoadmapSerializer(rm).data)
+            cats = level_categories.get(lvl, [])
+            
+            probs_qs = Problem.objects.filter(category__in=cats)
+            total_count = probs_qs.count()
+            
+            completed_probs = [p for p in probs_qs if p.id in solved_ids]
+            completed_count = len(completed_probs)
+            percentage = round((completed_count / total_count * 100), 1) if total_count > 0 else 0
+            
+            multiplier = level_multipliers.get(lvl, 20)
+            remaining_count = total_count - completed_count
+            est_time_minutes = remaining_count * multiplier
+            
+            problems_list = []
+            for p in probs_qs:
+                problems_list.append({
+                    'id': p.id,
+                    'title': p.title,
+                    'difficulty': p.difficulty,
+                    'category': p.category,
+                    'is_solved': p.id in solved_ids
+                })
+                
+            roadmaps.append({
+                'level': rm.level,
+                'opted_in': rm.opted_in,
+                'total_problems': total_count,
+                'completed_problems_count': completed_count,
+                'completion_percentage': percentage,
+                'estimated_time_minutes': est_time_minutes,
+                'skills_covered': level_skills.get(lvl, []),
+                'problems': problems_list
+            })
+            
         return Response(roadmaps)
         
     def post(self, request):
@@ -337,3 +435,173 @@ class ExportSubmissionsView(APIView):
             return response
             
         return Response({'error': 'Invalid format'}, status=status.HTTP_400_BAD_REQUEST)
+
+class ChallengeViewSet(viewsets.ModelViewSet):
+    queryset = Challenge.objects.all()
+    serializer_class = ChallengeSerializer
+
+    @action(detail=False, methods=['get'])
+    def status(self, request):
+        solved_ids = set(Submission.objects.filter(status='PASS').values_list('problem_id', flat=True))
+        challenges = Challenge.objects.all()
+        res = []
+        for ch in challenges:
+            problems = ch.problems.all()
+            completed_problems = [p.id for p in problems if p.id in solved_ids]
+            total_problems = problems.count()
+            percentage = round((len(completed_problems) / total_problems * 100), 1) if total_problems > 0 else 0
+            is_unlocked = len(completed_problems) == total_problems if total_problems > 0 else False
+            
+            problems_list = []
+            for p in problems:
+                problems_list.append({
+                    'id': p.id,
+                    'title': p.title,
+                    'difficulty': p.difficulty,
+                    'category': p.category,
+                    'is_solved': p.id in solved_ids
+                })
+
+            res.append({
+                'id': ch.id,
+                'name': ch.name,
+                'description': ch.description,
+                'badge_name': ch.badge_name,
+                'badge_icon': ch.badge_icon,
+                'total_problems': total_problems,
+                'completed_problems_count': len(completed_problems),
+                'completion_percentage': percentage,
+                'is_unlocked': is_unlocked,
+                'problems': problems_list
+            })
+        return Response(res)
+
+class AchievementsView(APIView):
+    def get(self, request):
+        completed_goals = Goal.objects.filter(status='Completed').order_by('-completion_date')
+        goals_data = GoalSerializer(completed_goals, many=True).data
+
+        solved_ids = set(Submission.objects.filter(status='PASS').values_list('problem_id', flat=True))
+        earned_badges = []
+        challenges = Challenge.objects.all()
+        for ch in challenges:
+            prob_ids = [p.id for p in ch.problems.all()]
+            if not prob_ids:
+                continue
+            is_earned = all(pid in solved_ids for pid in prob_ids)
+            if is_earned:
+                last_sub = Submission.objects.filter(status='PASS', problem_id__in=prob_ids).order_by('-timestamp').first()
+                completion_date = last_sub.timestamp.date() if last_sub else timezone.now().date()
+                
+                earned_badges.append({
+                    'id': ch.id,
+                    'name': ch.name,
+                    'description': ch.description,
+                    'badge_name': ch.badge_name,
+                    'badge_icon': ch.badge_icon,
+                    'completion_date': completion_date,
+                    'problems_count': len(prob_ids)
+                })
+
+        return Response({
+            'goals': goals_data,
+            'badges': earned_badges
+        })
+
+class CompanyViewSet(viewsets.ViewSet):
+    def list(self, request):
+        companies_list = [
+            "Google", "Meta", "Amazon", "Microsoft", "Apple", "Netflix", "Uber", 
+            "Airbnb", "LinkedIn", "Adobe", "Salesforce", "Databricks", "Snowflake", 
+            "NVIDIA", "Oracle", "Atlassian", "Stripe", "Bloomberg", "Walmart Global Tech", 
+            "Goldman Sachs", "JPMorgan Chase", "Cisco", "Intel", "Qualcomm", "PayPal", 
+            "Expedia", "Booking.com", "Spotify"
+        ]
+        solved_ids = set(Submission.objects.filter(status='PASS').values_list('problem_id', flat=True))
+        all_problems = Problem.objects.all()
+        
+        company_problems_map = {name: [] for name in companies_list}
+        for p in all_problems:
+            if p.companies:
+                for c_entry in p.companies:
+                    c_name = c_entry.get('company')
+                    if c_name in company_problems_map:
+                        company_problems_map[c_name].append(p)
+                        
+        res = []
+        for name in companies_list:
+            probs = company_problems_map[name]
+            total_problems = len(probs)
+            solved_probs = [p for p in probs if p.id in solved_ids]
+            completed_count = len(solved_probs)
+            percentage = round((completed_count / total_problems * 100), 1) if total_problems > 0 else 0
+            
+            easy = sum(1 for p in probs if p.difficulty == 'Easy')
+            medium = sum(1 for p in probs if p.difficulty == 'Medium')
+            hard = sum(1 for p in probs if p.difficulty == 'Hard')
+            
+            topics_dict = {}
+            for p in probs:
+                topics_dict[p.category] = topics_dict.get(p.category, 0) + 1
+            frequent_topics = sorted(topics_dict.keys(), key=lambda t: topics_dict[t], reverse=True)[:3]
+
+            res.append({
+                'name': name,
+                'total_problems': total_problems,
+                'completed_problems_count': completed_count,
+                'completion_percentage': percentage,
+                'difficulty_distribution': {'Easy': easy, 'Medium': medium, 'Hard': hard},
+                'frequent_topics': frequent_topics
+            })
+        return Response(res)
+
+    def retrieve(self, request, pk=None):
+        company_name = pk
+        solved_ids = set(Submission.objects.filter(status='PASS').values_list('problem_id', flat=True))
+        
+        all_problems = Problem.objects.all()
+        probs = []
+        for p in all_problems:
+            if p.companies:
+                for c_entry in p.companies:
+                    if c_entry.get('company') == company_name:
+                        probs.append((p, c_entry.get('frequency', 'Occasionally Asked')))
+                        break
+                        
+        total_problems = len(probs)
+        completed_probs = [p for p, _ in probs if p.id in solved_ids]
+        completed_count = len(completed_probs)
+        percentage = round((completed_count / total_problems * 100), 1) if total_problems > 0 else 0
+        
+        easy = sum(1 for p, _ in probs if p.difficulty == 'Easy')
+        medium = sum(1 for p, _ in probs if p.difficulty == 'Medium')
+        hard = sum(1 for p, _ in probs if p.difficulty == 'Hard')
+        
+        topics_dict = {}
+        for p, _ in probs:
+            topics_dict[p.category] = topics_dict.get(p.category, 0) + 1
+        frequent_topics = sorted(topics_dict.keys(), key=lambda t: topics_dict[t], reverse=True)[:5]
+        
+        problem_list = []
+        for p, freq in probs:
+            problem_list.append({
+                'id': p.id,
+                'title': p.title,
+                'difficulty': p.difficulty,
+                'category': p.category,
+                'is_solved': p.id in solved_ids,
+                'frequency': freq
+            })
+            
+        recently_added = problem_list[-3:] if len(problem_list) >= 3 else problem_list
+
+        return Response({
+            'name': company_name,
+            'total_problems': total_problems,
+            'completed_problems_count': completed_count,
+            'completion_percentage': percentage,
+            'difficulty_distribution': {'Easy': easy, 'Medium': medium, 'Hard': hard},
+            'frequent_topics': frequent_topics,
+            'problems': problem_list,
+            'recently_added': recently_added
+        })

@@ -7,7 +7,10 @@ import {
   Settings, 
   Upload, 
   BookOpen, 
-  Activity 
+  Activity,
+  Trophy,
+  Award,
+  Briefcase
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Roadmap from './components/Roadmap';
@@ -16,6 +19,9 @@ import PracticeSandbox from './components/PracticeSandbox';
 import SparkProfiles from './components/SparkProfiles';
 import ImportProblems from './components/ImportProblems';
 import UnderstandMe from './components/UnderstandMe';
+import Achievements from './components/Achievements';
+import Challenges from './components/Challenges';
+import CompanyExplorer from './components/CompanyExplorer';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -41,6 +47,12 @@ function App() {
             onSelectProblem={setSelectedProblemId}
           />
         );
+      case 'achievements':
+        return <Achievements />;
+      case 'challenges':
+        return <Challenges onSelectProblem={navigateToPractice} />;
+      case 'companies':
+        return <CompanyExplorer onSelectProblem={navigateToPractice} />;
       case 'profiles':
         return <SparkProfiles />;
       case 'import':
@@ -57,6 +69,9 @@ function App() {
     { id: 'roadmap', label: 'Learning Roadmaps', icon: Map },
     { id: 'problems', label: 'Problem Bank', icon: Database },
     { id: 'practice', label: 'Practice Sandbox', icon: Code },
+    { id: 'achievements', label: 'Achievements', icon: Trophy },
+    { id: 'challenges', label: 'Challenges', icon: Award },
+    { id: 'companies', label: 'Company Explorer', icon: Briefcase },
     { id: 'profiles', label: 'Spark Profiles', icon: Settings },
     { id: 'import', label: 'Import Problems', icon: Upload },
     { id: 'understand', label: 'Understand Me', icon: BookOpen }

@@ -153,6 +153,9 @@ def run_solution(problem_id, user_code_str, profile_name="Interview", submit=Tru
         return {"status": "ERROR", "message": f"Compilation Error: {str(e)}", "traceback": traceback.format_exc()}
         
     # Execute Test Cases
+    if not submit:
+        test_cases = list(test_cases)[:3]
+
     for tc_idx, tc in enumerate(test_cases):
         job_group_id = str(uuid.uuid4())
         spark.sparkContext.setJobGroup(job_group_id, f"Test Case {tc_idx+1}")

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from practice.models import Problem, TestCase, Dataset, Submission, SparkProfile, Goal, DailyActivity, UserRoadmap
+from practice.models import Problem, TestCase, Dataset, Submission, SparkProfile, Goal, DailyActivity, UserRoadmap, Challenge
 
 class ProblemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -30,9 +30,18 @@ class SparkProfileSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class GoalSerializer(serializers.ModelSerializer):
+    days_remaining = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Goal
         fields = '__all__'
+
+    def get_days_remaining(self, obj):
+        if obj.end_date:
+            import datetime
+            delta = obj.end_date - datetime.date.today()
+            return max(0, delta.days)
+        return None
 
 class DailyActivitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -42,4 +51,9 @@ class DailyActivitySerializer(serializers.ModelSerializer):
 class UserRoadmapSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserRoadmap
+        fields = '__all__'
+
+class ChallengeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Challenge
         fields = '__all__'

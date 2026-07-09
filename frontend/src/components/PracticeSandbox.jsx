@@ -91,7 +91,7 @@ ${inputKeys.map(k => `    ${k} = inputs['${k}']`).join('\n')}
       });
   };
 
-  const handleRunCode = () => {
+  const handleRunCode = (submit = true) => {
     setRunning(true);
     setRunResult(null);
     fetch('http://localhost:8000/api/practice/run/', {
@@ -102,7 +102,8 @@ ${inputKeys.map(k => `    ${k} = inputs['${k}']`).join('\n')}
       body: JSON.stringify({
         problem_id: currentProblemId,
         code: code,
-        profile_name: selectedProfile
+        profile_name: selectedProfile,
+        submit: submit
       })
     })
       .then(res => res.json())
@@ -126,7 +127,7 @@ ${inputKeys.map(k => `    ${k} = inputs['${k}']`).join('\n')}
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 5rem)' }}>
       
       {/* Header bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <select 
             value={currentProblemId} 
@@ -180,12 +181,23 @@ ${inputKeys.map(k => `    ${k} = inputs['${k}']`).join('\n')}
           </div>
           
           <button 
-            className="btn btn-primary"
-            onClick={handleRunCode}
+            className="btn btn-secondary"
+            onClick={() => handleRunCode(false)}
             disabled={running}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
           >
-            {running ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-            {running ? 'Executing...' : 'Run PySpark'}
+            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            Run Code
+          </button>
+
+          <button 
+            className="btn btn-primary"
+            onClick={() => handleRunCode(true)}
+            disabled={running}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+          >
+            {running ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            Submit Code
           </button>
         </div>
       </div>
@@ -248,6 +260,19 @@ ${inputKeys.map(k => `    ${k} = inputs['${k}']`).join('\n')}
                   {problem.description}
                 </p>
                 
+                {problem.companies && problem.companies.length > 0 && (
+                  <div>
+                    <h5 style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>COMPANIES</h5>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {problem.companies.map((c, idx) => (
+                        <span key={idx} style={{ background: 'rgba(255, 75, 75, 0.1)', color: 'var(--primary)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>
+                          {c.company} ({c.frequency})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {problem.concepts && (
                   <div>
                     <h5 style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>CONCEPTS</h5>
