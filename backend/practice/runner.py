@@ -224,10 +224,26 @@ def run_solution(problem_id, user_code_str, profile_name="Interview", submit=Tru
             
         # Run User's Solution
         t_start = time.perf_counter()
+        import io
+        import sys
+        from pyspark.sql import DataFrame
+
+        old_stdout = sys.stdout
+        redirected_stdout = io.StringIO()
+        sys.stdout = redirected_stdout
+        captured_output = ""
+
         try:
-            actual_df = solve_func(spark, inputs)
+            try:
+                actual_df = solve_func(spark, inputs)
+            finally:
+                sys.stdout = old_stdout
+                captured_output = redirected_stdout.getvalue()
+
             if actual_df is None:
                 raise ValueError("The 'solve' function returned None. It must return a Spark DataFrame.")
+            if not isinstance(actual_df, DataFrame):
+                raise TypeError(f"The 'solve' function returned a {type(actual_df).__name__} instead of a PySpark DataFrame.")
                 
             actual_df.cache()
             actual_count = actual_df.count() 
@@ -263,11 +279,39 @@ def run_solution(problem_id, user_code_str, profile_name="Interview", submit=Tru
             # Convert preview to dicts safely
             actual_preview = []
             expected_preview = []
-            try:
-                actual_preview = actual_df.limit(10).toPandas().to_dict(orient="records")
-                expected_preview = expected_df.limit(10).toPandas().to_dict(orient="records")
-            except Exception:
-                pass
+            
+            def get_preview_list(df):
+                import datetime
+                from decimal import Decimal
+                try:
+                    # Try using collect (native, no pandas dependency, handles nulls as None/null perfectly)
+                    rows = df.limit(10).collect()
+                    records = []
+                    for row in rows:
+                        row_dict = row.asDict(recursive=True)
+                        clean_dict = {}
+                        for k, v in row_dict.items():
+                            if isinstance(v, (datetime.datetime, datetime.date)):
+                                clean_dict[k] = v.isoformat()
+                            elif isinstance(v, Decimal):
+                                clean_dict[k] = float(v)
+                            else:
+                                clean_dict[k] = v
+                        records.append(clean_dict)
+                    return records
+                except Exception as e:
+                    # Fallback to pandas
+                    try:
+                        import pandas as pd
+                        pd_df = df.limit(10).toPandas()
+                        pd_df = pd_df.replace({pd.NA: None})
+                        pd_df = pd_df.where(pd.notnull(pd_df), None)
+                        return pd_df.to_dict(orient="records")
+                    except Exception as e2:
+                        return []
+
+            actual_preview = get_preview_list(actual_df)
+            expected_preview = get_preview_list(expected_df)
 
             results.append({
                 "test_case_id": tc.id,
@@ -277,7 +321,8 @@ def run_solution(problem_id, user_code_str, profile_name="Interview", submit=Tru
                 "actual_preview": actual_preview,
                 "expected_preview": expected_preview,
                 "actual_schema": [(f.name, f.dataType.simpleString()) for f in actual_df.schema],
-                "expected_schema": [(f.name, f.dataType.simpleString()) for f in expected_df.schema]
+                "expected_schema": [(f.name, f.dataType.simpleString()) for f in expected_df.schema],
+                "captured_output": captured_output
             })
             
             if not passed:
@@ -285,11 +330,19 @@ def run_solution(problem_id, user_code_str, profile_name="Interview", submit=Tru
                 
         except Exception as e:
             all_passed = False
+            # Ensure stdout is restored in case error happened before finally
+            sys.stdout = old_stdout
+            if not captured_output:
+                try:
+                    captured_output = redirected_stdout.getvalue()
+                except Exception:
+                    pass
             results.append({
                 "test_case_id": tc.id,
                 "passed": False,
                 "message": f"Execution Error: {str(e)}",
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc(),
+                "captured_output": captured_output
             })
             
     status = "PASS" if all_passed else "FAIL"

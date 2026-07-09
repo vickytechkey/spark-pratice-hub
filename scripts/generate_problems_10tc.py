@@ -133,12 +133,13 @@ def generate_all():
                 title = f"Clean Domain Names V{i}"
                 desc = f"Given user accounts DataFrame `df1`, extract the user name (part before '@') from the `email` column, name the new column `username`, and keep only columns `user_id` and `username`. Append suffix '_{i}_tc' to username."
                 concepts = "withColumn, split, select"
-                hints = f"Use `split(df1.email, '@')[0]` to extract the name, and concat the suffix."
+                hints = f"Use `split(df1.email, '@')[0]` to extract the name, and concat the suffix '_{i}_tc'."
             elif cat == "Aggregations":
+                threshold = i * 2
                 title = f"Sum Active Points V{i}"
-                desc = f"Group the user points DataFrame `df1` by `category`, sum the `points` column naming the result `total_points`, and filter to keep categories where `total_points` is greater than the dynamically set threshold."
+                desc = f"Group the user points DataFrame `df1` by `category`, sum the `points` column naming the result `total_points`, and filter to keep categories where `total_points` is strictly greater than {threshold}."
                 concepts = "groupBy, agg, sum, filter"
-                hints = "Use `.groupBy('category').agg(sum('points').alias('total_points')).filter('total_points > threshold')`."
+                hints = f"Use `.groupBy('category').agg(sum('points').alias('total_points')).filter('total_points > {threshold}')`."
             elif cat == "Joins":
                 title = f"Sales with Category V{i}"
                 desc = "Perform an inner join between sales DataFrame `df1` and products DataFrame `df2` on `product_id`. Return all columns from both DataFrames (ensure you do not duplicate the key column)."
@@ -156,9 +157,9 @@ def generate_all():
                 hints = "Use `Window.partitionBy('group').orderBy(col('score').desc())` and apply `rank().over(windowSpec)`."
             elif cat == "Data Cleaning & Null Handling":
                 title = f"Handle Null Scores V{i}"
-                desc = "Given user scores DataFrame `df1`, fill any missing (null) values in the `score` column with a dynamically set default value."
+                desc = "Given user scores DataFrame `df1`, fill any missing (null) values in the `score` column with the average score computed dynamically from all non-null scores."
                 concepts = "fillna, na.fill"
-                hints = "Use `df1.fillna(fill_val, subset=['score'])`."
+                hints = "Calculate average score first using `df1.select(avg('score')).first()[0]` and fill nulls: `df1.fillna(avg_score, subset=['score'])`."
             elif cat == "Performance & Optimization":
                 title = f"Repartition DataFrame V{i}"
                 desc = "Given input DataFrame `df1`, repartition it to a dynamically set number of partitions using `.repartition()`. Return the repartitioned DataFrame."
@@ -170,10 +171,11 @@ def generate_all():
                 concepts = "array_contains, filter"
                 hints = f"Use `from pyspark.sql.functions import array_contains` and `df1.filter(array_contains(df1.interests, 'sports_{i}'))`."
             elif cat == "User Defined Functions (UDFs)":
+                val = i
                 title = f"Custom Celsius conversion UDF V{i}"
-                desc = "Define or use a UDF to add a dynamically set value to the temperature values in Celsius column `temp_c`. The result should be named `new_temp`."
+                desc = f"Define or use a UDF to add a constant value of {val} to the temperature values in Celsius column `temp_c`. The result should be named `new_temp`."
                 concepts = "udf, withColumn"
-                hints = "Define a Python function, register it as a udf: `add_val_udf = udf(lambda x: x + val, IntegerType())` and apply it."
+                hints = f"Define a Python function, register it as a udf: `add_val_udf = udf(lambda x: x + {val}, IntegerType())` and apply it."
 
             save_problem({
                 "id": prob_id, "title": title, "difficulty": difficulty, "category": cat,
@@ -207,7 +209,7 @@ def generate_all():
                     expected = sorted(expected, key=lambda x: x["transaction_id"])
                     
                 elif cat == "Date & String":
-                    suffix = f"_{i}_tc{tc_idx}"
+                    suffix = f"_{i}_tc"
                     input_dict["df1"] = [
                         {"user_id": 1, "email": f"alice_{tc_idx}@gmail.com"},
                         {"user_id": 2, "email": f"bob_{tc_idx}@yahoo.com"}
@@ -218,7 +220,7 @@ def generate_all():
                     ]
                     
                 elif cat == "Aggregations":
-                    threshold = i * 2 + tc_idx
+                    threshold = i * 2
                     input_dict["df1"] = [
                         {"category": "Sports", "points": threshold + 1},
                         {"category": "Sports", "points": tc_idx},
@@ -261,7 +263,7 @@ def generate_all():
                     ]
                     
                 elif cat == "Data Cleaning & Null Handling":
-                    fill_val = i + tc_idx
+                    fill_val = 85.0 + tc_idx
                     input_dict["df1"] = [
                         {"user_id": 1, "score": None},
                         {"user_id": 2, "score": 85.0 + tc_idx}
@@ -292,7 +294,7 @@ def generate_all():
                     ]
                     
                 elif cat == "User Defined Functions (UDFs)":
-                    val = i + tc_idx
+                    val = i
                     input_dict["df1"] = [
                         {"city": "CityA", "temp_c": 20 + tc_idx},
                         {"city": "CityB", "temp_c": 15 + tc_idx}

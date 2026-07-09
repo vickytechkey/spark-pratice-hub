@@ -425,6 +425,71 @@ ${inputKeys.map(k => `    ${k} = inputs['${k}']`).join('\n')}
                           </div>
                           <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{tc.message}</p>
                           
+                          {/* If there is captured stdout (print statements): show it */}
+                          {tc.captured_output && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Console Output</div>
+                              <pre style={{ background: '#000', color: '#00ff66', padding: '0.5rem', borderRadius: '4px', fontSize: '0.75rem', overflowX: 'auto', margin: 0, fontFamily: 'var(--font-mono)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                {tc.captured_output}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* If failed and preview is available: show actual vs expected */}
+                          {!tc.passed && tc.actual_preview && tc.actual_preview.length > 0 && (
+                            <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', minWidth: 0 }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--error)', marginBottom: '0.25rem' }}>Actual Output (First 10 rows)</div>
+                                  <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,23,68,0.2)', borderRadius: '6px' }}>
+                                    <table className="custom-table" style={{ fontSize: '0.75rem', margin: 0 }}>
+                                      <thead>
+                                        <tr>
+                                          {Object.keys(tc.actual_preview[0]).map(col => (
+                                            <th key={col} style={{ padding: '0.5rem' }}>{col}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {tc.actual_preview.map((row, rIdx) => (
+                                          <tr key={rIdx}>
+                                            {Object.values(row).map((val, cIdx) => (
+                                              <td key={cIdx} style={{ padding: '0.5rem' }}>{val === null ? 'null' : typeof val === 'object' ? JSON.stringify(val) : String(val)}</td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                                
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)', marginBottom: '0.25rem' }}>Expected Output (First 10 rows)</div>
+                                  <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,230,118,0.2)', borderRadius: '6px' }}>
+                                    <table className="custom-table" style={{ fontSize: '0.75rem', margin: 0 }}>
+                                      <thead>
+                                        <tr>
+                                          {tc.expected_preview && tc.expected_preview.length > 0 && Object.keys(tc.expected_preview[0]).map(col => (
+                                            <th key={col} style={{ padding: '0.5rem' }}>{col}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {tc.expected_preview && tc.expected_preview.map((row, rIdx) => (
+                                          <tr key={rIdx}>
+                                            {Object.values(row).map((val, cIdx) => (
+                                              <td key={cIdx} style={{ padding: '0.5rem' }}>{val === null ? 'null' : typeof val === 'object' ? JSON.stringify(val) : String(val)}</td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* If error: show traceback */}
                           {tc.traceback && (
                             <pre style={{ background: '#000', color: 'var(--error)', padding: '0.5rem', borderRadius: '4px', fontSize: '0.75rem', marginTop: '0.5rem', overflowX: 'auto' }}>
