@@ -125,11 +125,23 @@ class DashboardView(APIView):
         monthly_goal_data = GoalSerializer(monthly_goal).data if monthly_goal else None
             
         # 5. Today's mission
-        # Find an unsolved problem as today's mission
+        # Find an unsolved problem as today's mission (seeded daily shuffle)
         today_mission = None
-        unsolved_problem = Problem.objects.exclude(id__in=solved_ids).first()
-        if unsolved_problem:
+        unsolved_problems = list(Problem.objects.exclude(id__in=solved_ids))
+        if unsolved_problems:
+            import random
+            date_seed = int(today.strftime('%Y%m%d'))
+            random.Random(date_seed).shuffle(unsolved_problems)
+            unsolved_problem = unsolved_problems[0]
             today_mission = ProblemSerializer(unsolved_problem).data
+        else:
+            all_problems = list(Problem.objects.all())
+            if all_problems:
+                import random
+                date_seed = int(today.strftime('%Y%m%d'))
+                random.Random(date_seed).shuffle(all_problems)
+                unsolved_problem = all_problems[0]
+                today_mission = ProblemSerializer(unsolved_problem).data
             
         # 6. Heatmap Data (last 365 days)
         one_year_ago = today - datetime.timedelta(days=365)
@@ -211,32 +223,50 @@ class ProblemViewSet(viewsets.ReadOnlyModelViewSet):
         problem = self.get_object()
         test_cases = TestCase.objects.filter(problem=problem)
         
+        def _load_preview(dataset):
+            if not dataset or not os.path.exists(dataset.file_path):
+                return []
+            file_type = dataset.type.upper()
+            try:
+                if file_type == 'JSON':
+                    with open(dataset.file_path, 'r') as f:
+                        data = json.load(f)
+                        return data[:10]
+                elif file_type == 'CSV':
+                    import pandas as pd
+                    df = pd.read_csv(dataset.file_path)
+                    df = df.where(pd.notnull(df), None)
+                    return df.head(10).to_dict(orient='records')
+                elif file_type == 'PARQUET':
+                    import pandas as pd
+                    df = pd.read_parquet(dataset.file_path)
+                    df = df.where(pd.notnull(df), None)
+                    return df.head(10).to_dict(orient='records')
+                elif file_type in ('EXCEL', 'XLSX'):
+                    import pandas as pd
+                    df = pd.read_excel(dataset.file_path)
+                    df = df.where(pd.notnull(df), None)
+                    return df.head(10).to_dict(orient='records')
+            except Exception:
+                pass
+            return []
+
         # Load input dataset preview (from the first test case)
         inputs_preview = {}
         if test_cases.exists():
             tc = test_cases.first()
             for key, ds_name in tc.input_datasets.items():
                 dataset = Dataset.objects.filter(name=ds_name).first()
-                if dataset and os.path.exists(dataset.file_path):
-                    try:
-                        with open(dataset.file_path, 'r') as f:
-                            data = json.load(f)
-                            inputs_preview[key] = data[:10]  # first 10 rows
-                    except Exception:
-                        pass
+                if dataset:
+                    inputs_preview[key] = _load_preview(dataset)
                         
         # Load expected output preview (from first test case)
         expected_preview = []
         if test_cases.exists():
             tc = test_cases.first()
             expected_ds = Dataset.objects.filter(name=tc.expected_output_dataset).first()
-            if expected_ds and os.path.exists(expected_ds.file_path):
-                try:
-                    with open(expected_ds.file_path, 'r') as f:
-                        data = json.load(f)
-                        expected_preview = data[:10]
-                except Exception:
-                    pass
+            if expected_ds:
+                expected_preview = _load_preview(expected_ds)
                     
         return Response({
             'problem': ProblemSerializer(problem).data,
