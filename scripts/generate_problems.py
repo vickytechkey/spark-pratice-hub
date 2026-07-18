@@ -101,13 +101,101 @@ categories = [
     "User Defined Functions (UDFs)"
 ]
 
+category_prefixes = {
+    "Filtering & Sorting": "FIL",
+    "Date & String": "DTE",
+    "Aggregations": "AGG",
+    "Joins": "JOI",
+    "Advanced Nested & Pivot": "ADV",
+    "Window Functions": "WIN",
+    "Data Cleaning & Null Handling": "CLE",
+    "Performance & Optimization": "PER",
+    "Array & Map Operations": "ARR",
+    "User Defined Functions (UDFs)": "USE"
+}
+
+EXAMPLES_MD = """
+
+### Example 1
+**Input (`df1`):**
+| user_id | score |
+| :--- | :--- |
+| 1 | null |
+| 2 | 80.0 |
+| 3 | 90.0 |
+| 4 | null |
+| 5 | 70.0 |
+
+**Expected Output:**
+| user_id | score |
+| :--- | :--- |
+| 1 | 80.0 |
+| 2 | 80.0 |
+| 3 | 90.0 |
+| 4 | 80.0 |
+| 5 | 70.0 |
+
+*(Average score of non-nulls `[80.0, 90.0, 70.0]` is `80.0`)*
+
+### Example 2
+**Input (`df1`):**
+| user_id | score |
+| :--- | :--- |
+| 10 | 100.0 |
+| 11 | null |
+| 12 | 50.0 |
+| 13 | 60.0 |
+| 14 | 90.0 |
+
+**Expected Output:**
+| user_id | score |
+| :--- | :--- |
+| 10 | 100.0 |
+| 11 | 75.0 |
+| 12 | 50.0 |
+| 13 | 60.0 |
+| 14 | 90.0 |
+
+*(Average score of non-nulls `[100.0, 50.0, 60.0, 90.0]` is `75.0`)*
+
+### Example 3
+**Input (`df1`):**
+| user_id | score |
+| :--- | :--- |
+| 20 | null |
+| 21 | 95.0 |
+| 22 | 85.0 |
+| 23 | null |
+
+**Expected Output:**
+| user_id | score |
+| :--- | :--- |
+| 20 | 90.0 |
+| 21 | 95.0 |
+| 22 | 85.0 |
+| 23 | 90.0 |
+
+*(Average score of non-nulls `[95.0, 85.0]` is `90.0`)*
+"""
+
 def generate_all():
     init_db()
+    
+    # Clean up old database entries to prevent duplicate/colliding problems
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    for prefix in ["SPK-DAT-", "SPK-DTE-", "SPK-CLE-"]:
+        cursor.execute("DELETE FROM test_cases WHERE problem_id LIKE ?", (prefix + "%",))
+        cursor.execute("DELETE FROM problems WHERE id LIKE ?", (prefix + "%",))
+        cursor.execute("DELETE FROM datasets WHERE name LIKE ?", (prefix + "%",))
+    conn.commit()
+    conn.close()
     
     for cat in categories:
         print(f"Generating for category: {cat}...")
         for i in range(1, 101):
-            prob_id = f"SPK-{cat[:3].upper()}-{i:03d}".replace(" & ", "").replace(" ", "")
+            prefix = category_prefixes.get(cat, cat[:3].upper())
+            prob_id = f"SPK-{prefix}-{i:03d}"
             difficulty = "Easy" if i <= 35 else "Medium" if i <= 80 else "Hard"
             
             # Category-specific template logic
@@ -134,19 +222,18 @@ def generate_all():
                 }, {"df1": input_data}, expected)
                 
             elif cat == "Date & String":
-                suffix = f"_{i}"
                 title = f"Clean Domain Names V{i}"
-                desc = f"Given user accounts DataFrame `df1`, extract the user name (part before '@') from the `email` column, name the new column `username`, and keep only columns `user_id` and `username`. Append suffix '{suffix}' to username."
+                desc = f"Given user accounts DataFrame `df1`, extract the user name (part before '@') from the `email` column, name the new column `username`, and keep only columns `user_id` and `username`. Append suffix '_{i}_tc' to username."
                 concepts = "withColumn, split, select"
-                hints = f"Use `split(df1.email, '@')[0]` to extract the name, and concat suffix '{suffix}'."
+                hints = f"Use `split(df1.email, '@')[0]` to extract the name, and concat the suffix '_{i}_tc'."
                 
                 input_data = [
                     {"user_id": 1, "email": "alice@gmail.com"},
                     {"user_id": 2, "email": "bob@yahoo.com"}
                 ]
                 expected = [
-                    {"user_id": 1, "username": f"alice{suffix}"},
-                    {"user_id": 2, "username": f"bob{suffix}"}
+                    {"user_id": 1, "username": f"alice_{i}_tc"},
+                    {"user_id": 2, "username": f"bob_{i}_tc"}
                 ]
                 save_problem_and_testcase({
                     "id": prob_id, "title": title, "difficulty": difficulty, "category": cat,
@@ -226,20 +313,31 @@ def generate_all():
                 }, {"df1": input_data}, expected)
                 
             elif cat == "Data Cleaning & Null Handling":
-                fill_val = i
                 title = f"Handle Null Scores V{i}"
-                desc = f"Given user scores DataFrame `df1`, fill any missing (null) values in the `score` column with a default value of {fill_val}."
+                desc = "Given user scores DataFrame `df1`, fill any missing (null) values in the `score` column with the average score computed dynamically from all non-null scores." + EXAMPLES_MD
                 concepts = "fillna, na.fill"
-                hints = f"Use `df1.fillna({fill_val}, subset=['score'])` or `df1.na.fill({fill_val}, ['score'])`."
+                hints = "Calculate average score first using `df1.select(avg('score')).first()[0]` and fill nulls: `df1.fillna(avg_score, subset=['score'])`."
                 
-                input_data = [
-                    {"user_id": 1, "score": None},
-                    {"user_id": 2, "score": 85.0}
+                # Generate 8 rows
+                base_score = 70.0 + i
+                raw_scores = [
+                    base_score + 10.0,
+                    None,
+                    base_score + 5.0,
+                    None,
+                    base_score + 15.0,
+                    base_score,
+                    None,
+                    base_score + 20.0
                 ]
-                expected = [
-                    {"user_id": 1, "score": float(fill_val)},
-                    {"user_id": 2, "score": 85.0}
-                ]
+                avg_val = base_score + 10.0
+                
+                input_data = []
+                expected = []
+                for row_idx, score in enumerate(raw_scores, start=1):
+                    input_data.append({"user_id": row_idx, "score": score})
+                    expected.append({"user_id": row_idx, "score": float(avg_val) if score is None else float(score)})
+                    
                 save_problem_and_testcase({
                     "id": prob_id, "title": title, "difficulty": difficulty, "category": cat,
                     "description": desc, "concepts": concepts, "hints": hints, "comparison_mode": "Ignore row order"
