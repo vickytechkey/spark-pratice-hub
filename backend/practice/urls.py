@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from practice.views import (
     DashboardView, ProblemViewSet, PracticeRunView, SparkProfileViewSet, 
     GoalViewSet, UserRoadmapViewSet, AdminImportView, SubmissionHistoryView,
-    ExportSubmissionsView, ChallengeViewSet, AchievementsView, CompanyViewSet
+    ExportSubmissionsView, ChallengeViewSet, AchievementsView, CompanyViewSet,
+    SparkMasterScheduleView, SparkMasterLogView, SparkMasterResetView
 )
 
 router = DefaultRouter()
@@ -22,4 +23,8 @@ urlpatterns = [
     path('admin/import/', AdminImportView.as_view(), name='admin-import'),
     path('submissions/', SubmissionHistoryView.as_view(), name='submissions-history'),
     path('export/', ExportSubmissionsView.as_view(), name='export-submissions'),
+    path('spark_master/schedule/', SparkMasterScheduleView.as_view(), name='spark-master-schedule'),
+    path('spark_master/log_session/', SparkMasterLogView.as_view(), name='spark-master-log'),
+    path('spark_master/reset_schedule/', SparkMasterResetView.as_view(), name='spark-master-reset'),
 ]
+

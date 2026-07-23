@@ -22,6 +22,7 @@ import UnderstandMe from './components/UnderstandMe';
 import Achievements from './components/Achievements';
 import Challenges from './components/Challenges';
 import CompanyExplorer from './components/CompanyExplorer';
+import SparkMasterPlanner from './components/SparkMasterPlanner';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -38,6 +39,8 @@ function App() {
         return <Dashboard onSelectProblem={navigateToPractice} />;
       case 'roadmap':
         return <Roadmap onSelectProblem={navigateToPractice} />;
+      case 'spark-master':
+        return <SparkMasterPlanner />;
       case 'problems':
         return <ProblemBank onSelectProblem={navigateToPractice} />;
       case 'practice':
@@ -66,6 +69,7 @@ function App() {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'spark-master', label: 'Spark Master Path', icon: BookOpen },
     { id: 'roadmap', label: 'Learning Roadmaps', icon: Map },
     { id: 'problems', label: 'Problem Bank', icon: Database },
     { id: 'practice', label: 'Practice Sandbox', icon: Code },

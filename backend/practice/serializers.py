@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from practice.models import Problem, TestCase, Dataset, Submission, SparkProfile, Goal, DailyActivity, UserRoadmap, Challenge
+from practice.models import Problem, TestCase, Dataset, Submission, SparkProfile, Goal, DailyActivity, UserRoadmap, Challenge, SparkMasterTopic, SparkMasterSchedule
 
 class ProblemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -57,3 +57,20 @@ class ChallengeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Challenge
         fields = '__all__'
+
+class SparkMasterTopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SparkMasterTopic
+        fields = '__all__'
+
+class SparkMasterScheduleSerializer(serializers.ModelSerializer):
+    topic_title = serializers.CharField(source='topic.title', read_only=True)
+    topic_category = serializers.CharField(source='topic.category', read_only=True)
+    topic_description = serializers.CharField(source='topic.description', read_only=True)
+    topic_subtopics = serializers.JSONField(source='topic.subtopics', read_only=True)
+    topic_points = serializers.IntegerField(source='topic.points', read_only=True)
+
+    class Meta:
+        model = SparkMasterSchedule
+        fields = '__all__'
+

@@ -80,3 +80,25 @@ class Challenge(models.Model):
 
     def __str__(self):
         return self.name
+
+class SparkMasterTopic(models.Model):
+    title = models.CharField(max_length=200)
+    category = models.CharField(max_length=50) # Beginner, Intermediate, Master
+    description = models.TextField()
+    subtopics = models.JSONField(default=list)
+    points = models.IntegerField(default=10)
+    order = models.IntegerField()
+
+    def __str__(self):
+        return f"{self.category} - {self.title}"
+
+class SparkMasterSchedule(models.Model):
+    topic = models.ForeignKey(SparkMasterTopic, on_delete=models.CASCADE, related_name='schedules')
+    scheduled_date = models.DateField()
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    focus_minutes_spent = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.scheduled_date} - {self.topic.title} - {self.completed}"
+

@@ -635,3 +635,163 @@ class CompanyViewSet(viewsets.ViewSet):
             'problems': problem_list,
             'recently_added': recently_added
         })
+
+
+class SparkMasterScheduleView(APIView):
+    def get(self, request):
+        from practice.models import SparkMasterTopic, SparkMasterSchedule
+        from practice.serializers import SparkMasterScheduleSerializer
+        
+        # 1. Check if topics are loaded. If not, load default syllabus
+        if SparkMasterTopic.objects.count() == 0:
+            self._initialize_default_topics()
+            
+        # 2. Check if schedule is generated. If not, generate starting tomorrow July 24, 2026
+        if SparkMasterSchedule.objects.count() == 0:
+            self._generate_default_schedule(datetime.date(2026, 7, 24))
+            
+        # 3. Retrieve schedule
+        schedules = SparkMasterSchedule.objects.all().order_by('scheduled_date')
+        serialized = SparkMasterScheduleSerializer(schedules, many=True).data
+        
+        # 4. Compute metrics
+        total_points = 0
+        weekly_points = 0
+        today = datetime.date.today()
+        
+        # Start of current week (Monday)
+        start_of_week = today - datetime.timedelta(days=today.weekday())
+        
+        for s in schedules:
+            if s.completed:
+                total_points += s.topic.points
+                if s.completed_at and s.completed_at.date() >= start_of_week:
+                    weekly_points += s.topic.points
+                    
+        # Milestone calculation
+        # 0-50: Spark Novice, 51-120: ETL Engineer, 121-200: Pipeline Architect, 200+: Spark Master
+        if total_points >= 200:
+            milestone = "Spark Master 🏆"
+        elif total_points >= 120:
+            milestone = "Pipeline Architect ⚙️"
+        elif total_points >= 50:
+            milestone = "ETL Engineer 🛠️"
+        else:
+            milestone = "Spark Novice 🌱"
+            
+        return Response({
+            'schedules': serialized,
+            'total_points': total_points,
+            'weekly_points': weekly_points,
+            'weekly_target': 50,
+            'milestone': milestone
+        })
+
+    def _initialize_default_topics(self):
+        from practice.models import SparkMasterTopic
+        default_topics = [
+            # Beginner
+            {"title": "Spark Core Architecture", "category": "Beginner", "description": "Understand driver, executor, cluster manager, JVMs, slot allocation, and basic distributed execution.", "subtopics": ["Driver & Executors", "Worker Nodes", "Slots & Cores", "Cluster Managers (YARN, K8s, Standalone)"], "order": 1},
+            {"title": "RDDs vs DataFrames vs Datasets", "category": "Beginner", "description": "Differentiate resilient distributed datasets, structured DataFrames, and strongly-typed Datasets. Lazy evaluation and DAG.", "subtopics": ["Immutability", "Lineage Graph", "Lazy Evaluation", "DAG (Directed Acyclic Graph)"], "order": 2},
+            {"title": "Basic DF Transformations", "category": "Beginner", "description": "Apply standard transformations: select, filter, where, alias, drop, withColumnRenamed.", "subtopics": ["select()", "filter() / where()", "withColumn()", "drop() & alias()"], "order": 3},
+            {"title": "Basic DF Actions", "category": "Beginner", "description": "Trigger computation with actions: show, collect, count, take, first, write.", "subtopics": ["show() & collect()", "count() & take()", "first() & head()", "write()"], "order": 4},
+            {"title": "Schema Definitions & Types", "category": "Beginner", "description": "Define explicit schemas using StructType and StructField for query performance and validation.", "subtopics": ["StructType & StructField", "DataType subclasses", "Programmatic schemas", "DDL-formatted schemas"], "order": 5},
+            {"title": "Reading & Writing Files", "category": "Beginner", "description": "Load and store datasets in CSV, JSON, and plain text formats with options.", "subtopics": ["spark.read.format()", "Header & schema inference options", "write.mode()", "Partition directories output"], "order": 6},
+            {"title": "Spark SQL Basics", "category": "Beginner", "description": "Create temporary views and query them using raw ANSI SQL.", "subtopics": ["createOrReplaceTempView()", "spark.sql()", "Mixing SQL and DataFrame API", "Show tables"], "order": 7},
+
+            # Intermediate
+            {"title": "GroupBy & Aggregations", "category": "Intermediate", "description": "Aggregate data using groupby, sum, avg, count, max, min, and PySpark functions API.", "subtopics": ["groupBy() & agg()", "pyspark.sql.functions", "Multiple aggregations", "Pivot operations"], "order": 8},
+            {"title": "Join Strategies & Types", "category": "Intermediate", "description": "Merge datasets using inner, left, right, outer, semi, and anti joins.", "subtopics": ["Inner & Outer Joins", "Left & Right Joins", "Left Semi & Left Anti", "Handling duplicate columns after join"], "order": 9},
+            {"title": "Spark Partitioning", "category": "Intermediate", "description": "Optimize partitions using coalesce and repartition to prevent small file problems.", "subtopics": ["repartition() vs coalesce()", "Partition size guidelines", "Default parallelism", "Writing partitioned data"], "order": 10},
+            {"title": "Writing to Parquet & ORC", "category": "Intermediate", "description": "Understand columnar storage formats, dictionary encoding, compression (Snappy), and predicate pushdown.", "subtopics": ["Columnar Storage benefits", "Snappy compression", "Partition pruning", "Metadata storage"], "order": 11},
+            {"title": "User Defined Functions (UDFs)", "category": "Intermediate", "description": "Build python UDFs and vectorized Pandas UDFs (PyArrow) for customized row processing.", "subtopics": ["Standard Python UDFs", "Vectorized UDFs (Pandas UDFs)", "Serialization overhead", "UDF registration"], "order": 12},
+            {"title": "Cache & Persist", "category": "Intermediate", "description": "Cache intermediate results in memory/disk to optimize iterative execution plans.", "subtopics": ["cache() vs persist()", "Storage levels (MEMORY_AND_DISK, etc.)", "unpersist()", "When NOT to cache"], "order": 13},
+            {"title": "Reading Query Execution Plans", "category": "Intermediate", "description": "Debug performance using explain() to examine physical, logical, and optimized plans.", "subtopics": ["explain(true)", "Parsed vs Analyzed vs Optimized", "Identifying shuffles in plans", "Stage boundaries"], "order": 14},
+
+            # Master
+            {"title": "Performance Tuning: Memory Layout", "category": "Master", "description": "Tune executor memory parameters. Learn Storage memory vs Execution memory.", "subtopics": ["spark.executor.memory", "Storage vs Execution memory fraction", "Off-heap memory", "Garbage collection impact"], "order": 15},
+            {"title": "Broadcast Joins", "category": "Master", "description": "Use broadcast joins to eliminate shuffle overhead for small lookup tables.", "subtopics": ["broadcast() function", "spark.sql.autoBroadcastJoinThreshold", "Network transfer costs", "OOM risks"], "order": 16},
+            {"title": "Adaptive Query Execution (AQE)", "category": "Master", "description": "Leverage dynamic partition coalescing, local joins, and skew join optimization at runtime.", "subtopics": ["spark.sql.adaptive.enabled", "Dynamic shuffle partitions", "Coalescing partitions", "Dynamic join selection"], "order": 17},
+            {"title": "Handling Data Skew", "category": "Master", "description": "Address unbalanced partitions using salting, skew hints, and broadcast joins.", "subtopics": ["Identifying skew in Spark UI", "Salting keys", "AQE Skew Join optimization", "Map-side joins"], "order": 18},
+            {"title": "Advanced Window Functions", "category": "Master", "description": "Compute running totals, rankings, moving averages using Window specifications.", "subtopics": ["Window.partitionBy()", "orderBy() & rowsBetween()", "lead(), lag(), rank(), row_number()", "Performance considerations"], "order": 19},
+            {"title": "Incremental ETL & Delta Lake", "category": "Master", "description": "Use Delta Lake to implement ACID transactions, time travel, schema enforcement, and merges.", "subtopics": ["Delta format read/write", "Update, Delete, Merge operations", "Time Travel queries", "Vacuuming files"], "order": 20},
+            {"title": "Structured Streaming", "category": "Master", "description": "Build real-time streams with micro-batches, watermarks, sliding windows, and sinks.", "subtopics": ["readStream & writeStream", "Output Modes (Append, Complete, Update)", "Watermarking late data", "Stateful streaming"], "order": 21},
+            {"title": "Production Spark ETL Pipeline Design", "category": "Master", "description": "Design end-to-end resilient production pipelines including schema validation, logging, and retries.", "subtopics": ["Idempotency", "Orchestration integration (Airflow)", "Quality checks / Great Expectations", "SLA monitoring & alerts"], "order": 22}
+        ]
+        for t in default_topics:
+            SparkMasterTopic.objects.get_or_create(
+                title=t["title"],
+                defaults={
+                    "category": t["category"],
+                    "description": t["description"],
+                    "subtopics": t["subtopics"],
+                    "order": t["order"],
+                    "points": 10
+                }
+            )
+
+    def _generate_default_schedule(self, start_date):
+        from practice.models import SparkMasterTopic, SparkMasterSchedule
+        topics = SparkMasterTopic.objects.all().order_by('order')
+        current_date = start_date
+        for topic in topics:
+            SparkMasterSchedule.objects.get_or_create(
+                topic=topic,
+                defaults={"scheduled_date": current_date}
+            )
+            current_date += datetime.timedelta(days=1)
+
+
+class SparkMasterLogView(APIView):
+    def post(self, request):
+        from practice.models import SparkMasterSchedule
+        from practice.serializers import SparkMasterScheduleSerializer
+        
+        schedule_id = request.data.get('schedule_id')
+        completed = request.data.get('completed', True)
+        minutes_spent = request.data.get('minutes_spent', 0)
+        
+        schedule = SparkMasterSchedule.objects.filter(id=schedule_id).first()
+        if not schedule:
+            return Response({'error': 'Schedule not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        schedule.completed = completed
+        if completed:
+            schedule.completed_at = timezone.now()
+        else:
+            schedule.completed_at = None
+            
+        schedule.focus_minutes_spent += int(minutes_spent)
+        schedule.save()
+        
+        return Response(SparkMasterScheduleSerializer(schedule).data)
+
+
+class SparkMasterResetView(APIView):
+    def post(self, request):
+        from practice.models import SparkMasterTopic, SparkMasterSchedule
+        
+        start_date_str = request.data.get('start_date')
+        if start_date_str:
+            try:
+                start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            start_date = datetime.date(2026, 7, 24)
+            
+        # Delete existing schedules
+        SparkMasterSchedule.objects.all().delete()
+        
+        # Regenerate
+        topics = SparkMasterTopic.objects.all().order_by('order')
+        current_date = start_date
+        for topic in topics:
+            SparkMasterSchedule.objects.create(
+                topic=topic,
+                scheduled_date=current_date
+            )
+            current_date += datetime.timedelta(days=1)
+            
+        return Response({'success': True, 'message': f'Schedule reset successfully starting {start_date}'})
+
